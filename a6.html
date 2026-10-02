@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>簡易太空射擊遊戲</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        #info {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        canvas {
+            background: #000;
+            border: 2px solid #00f0ff;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部提示與分數 -->
+    <div id="info">分數: <span id="scoreText">0</span> | 操作: [左右鍵/A D] 移動，[空白鍵] 發射</div>
+    
+    <!-- 遊戲畫布 -->
+    <canvas id="gameCanvas" width="400" height="550"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreText = document.getElementById('scoreText');
+
+        // 簡易音效產生器（無需下載任何音樂檔）
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, duration) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        let score = 0;
+        let isGameOver = false;
+        const keys = {};
+
+        // 玩家戰機
+        const player = {
+            x: 180,
+            y: 490,
+            w: 40,
+            h: 30,
+            speed: 5
+        };
+
+        const bullets = [];
+        const enemies = [];
+        let enemyTimer = 0;
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (isGameOver) {
+                    resetGame();
+                } else {
+                    // 發射子彈與音效
+                    bullets.push({ x: player.x + player.w / 2 - 2, y: player.y, w: 4, h: 10, speed: 7 });
+                    playTone(600, 'square', 0.08); // 雷射音
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function update() {
+            if (isGameOver) return;
+
+            // 移動控制
+            if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > 0) player.x -= player.speed;
+            if ((keys['ArrowRight'] || keys['KeyD']) && player.x + player.w < canvas.width) player.x += player.speed;
+
+            // 子彈移動與邊界清除
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bullets[i].speed;
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+
+            // 定時產生敵機
+            enemyTimer++;
+            if (enemyTimer % 50 === 0) {
+                enemies.push({ x: Math.random() * (canvas.width - 30), y: -30, w: 30, h: 25, speed: 2.5 });
+            }
+
+            // 敵機移動與碰撞檢查
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const en = enemies[i];
+                en.y += en.speed;
+
+                // 碰撞判定：敵機 vs 玩家 (Game Over)
+                if (en.x < player.x + player.w && en.x + en.w > player.x &&
+                    en.y < player.y + player.h && en.y + en.h > player.y) {
+                    playTone(100, 'sawtooth', 0.4); // 爆炸音
+                    isGameOver = true;
+                }
+
+                // 碰撞判定：子彈 vs 敵機
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const bu = bullets[j];
+                    if (bu.x < en.x + en.w && bu.x + bu.w > en.x &&
+                        bu.y < en.y + en.h && bu.y + bu.h > en.y) {
+                        playTone(220, 'triangle', 0.15); // 擊毀音
+                        enemies.splice(i, 1);
+                        bullets.splice(j, 1);
+                        score += 10;
+                        scoreText.textContent = score;
+                        break;
+                    }
+                }
+
+                // 超出底部清除
+                if (en && en.y > canvas.height) enemies.splice(i, 1);
+            }
+        }
+
+        function draw() {
+            // 清空畫面
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製玩家戰機 (綠色三角)
+            ctx.fillStyle = '#00ff88';
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.w / 2, player.y);
+            ctx.lineTo(player.x, player.y + player.h);
+            ctx.lineTo(player.x + player.w, player.y + player.h);
+            ctx.closePath();
+            ctx.fill();
+
+            // 繪製子彈 (黃色)
+            ctx.fillStyle = '#ffff00';
+            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+            // 繪製敵機 (紅色方形)
+            ctx.fillStyle = '#ff4444';
+            enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+
+            // 遊戲結束字樣
+            if (isGameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ff3333';
+                ctx.font = '28px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 10);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '16px sans-serif';
+                ctx.fillText('按 空白鍵 (Space) 重新開始', canvas.width / 2, canvas.height / 2 + 25);
+            }
+        }

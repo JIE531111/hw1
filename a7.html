@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Neon Breakout - 霓虹打磚塊</title>
+    <!-- 引入 Three.js 3D 渲染庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #03030c;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #hud {
+            position: absolute;
+            top: 15px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 10;
+            pointer-events: none;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
+        }
+        .hud-card {
+            background: rgba(10, 15, 30, 0.65);
+            border: 1px solid rgba(0, 240, 255, 0.4);
+            border-radius: 12px;
+            padding: 8px 18px;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+            font-size: 1.1rem;
+        }
+        .hud-card span {
+            color: #00f0ff;
+            font-size: 1.3rem;
+            margin-left: 5px;
+        }
+        .heart-icon {
+            color: #ff0077;
+            font-size: 1.3rem;
+            text-shadow: 0 0 10px #ff0077;
+        }
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(4, 6, 18, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 20;
+            transition: opacity 0.3s ease;
+        }
+        .screen-content {
+            text-align: center;
+            max-width: 480px;
+            padding: 30px;
+            background: linear-gradient(145deg, rgba(20, 25, 50, 0.9), rgba(10, 12, 25, 0.95));
+            border: 2px solid #00f0ff;
+            border-radius: 20px;
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.35), inset 0 0 20px rgba(0, 240, 255, 0.1);
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.4rem;
+            background: linear-gradient(90deg, #ff0077, #00f0ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        p {
+            color: #b0c0df;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin: 12px 0 24px 0;
+        }
+        .glow-btn {
+            background: linear-gradient(90deg, #ff0077, #7928ca);
+            color: #fff;
+            border: none;
+            padding: 14px 40px;
+            font-size: 1.15rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(255, 0, 119, 0.6);
+            transition: all 0.25s ease;
+            letter-spacing: 1px;
+            outline: none;
+        }
+        .glow-btn:hover {
+            transform: scale(1.06);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.9);
+            background: linear-gradient(90deg, #00f0ff, #7928ca);
+        }
+        .glow-btn:active {
+            transform: scale(0.96);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.85rem;
+            z-index: 10;
+            pointer-events: none;
+            text-align: center;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部資訊列 (HUD) -->
+    <div id="hud">
+        <div class="hud-card">關卡: <span id="level-val">1</span></div>
+        <div class="hud-card">分數: <span id="score-val">0</span></div>
+        <div class="hud-card">生命: <span id="lives-val" class="heart-icon">❤️❤️❤️</span></div>
+    </div>
+
+    <!-- 3D 繪圖容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- 底部操作提示 -->
+    <div id="instructions">
+        [滑鼠/觸控/左右鍵] 移動板子 ｜ [點擊/空白鍵] 發射球
+    </div>
+
+    <!-- 開始 / 結算彈窗 -->
+    <div id="screen-modal" class="overlay-screen">
+        <div class="screen-content">
+            <h1 id="modal-title">3D 霓虹打磚塊</h1>
+            <p id="modal-desc">
+                移動底部的霓虹反彈板，發射光能球擊碎所有色彩斑斕的立體磚塊！<br>
+                連續擊破可獲得更高分數。準備好挑戰了嗎？
+            </p>
+            <button id="modal-btn" class="glow-btn">開始遊戲</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 內建合成音效系統 (Web Audio API) ---
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            // 彈球擊中擋板或牆壁
+            bounce(isPaddle = false) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const freq = isPaddle ? 440 : 330;
+                
+                osc.type = isPaddle ? 'sine' : 'triangle';
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.5, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.09);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.09);
+            }
+            // 擊破磚塊音效 (清脆立體波形)
+            breakBrick(multiplier = 1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const baseFreq = 500 + Math.min(multiplier * 60, 600);
+
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 2.2, this.ctx.currentTime + 0.12);
+
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.13);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.13);
+            }
+            // 掉球失誤音效
+            loseLife() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(280, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(70, this.ctx.currentTime + 0.35);
+
+                gain.gain.setValueAtTime(0.22, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.35);
+            }
+            // 勝利 / 過關音效
+            winLevel() {
+                if (!this.ctx) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const startTime = this.ctx.currentTime + idx * 0.11;
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, startTime);
+
+                    gain.gain.setValueAtTime(0.2, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.22);
+                });
+            }
+        }
+        const sfx = new SoundFX();
+
+        // --- 2. 遊戲場景規格常數 ---
+        const ARENA_WIDTH = 28;
+        const ARENA_HEIGHT = 40;
+        const BALL_RADIUS = 0.55;
+        const PADDLE_WIDTH = 5.2;
+        const PADDLE_HEIGHT = 0.9;
+        const PADDLE_DEPTH = 1.0;
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x03030e, 0.015);
+
+        // 攝影機配置 (俯視斜角視野，增強立體感)
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, -ARENA_HEIGHT * 0.5 - 5, 26);
+        camera.lookAt(0, 3, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // 環境燈光與點光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        mainLight.position.set(10, -10, 25);
+        mainLight.castShadow = true;
+        scene.add(mainLight);
+
+        // 隨球移動的霓虹發光點光源
+        const ballLight = new THREE.PointLight(0x00f0ff, 2.8, 14);
+        scene.add(ballLight);
+
+        // 競技場立體邊界與格線地板
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0x141829,
+            metalness: 0.8,
+            roughness: 0.25,
+            emissive: 0x050a1c
+        });
+
+        // 頂部牆
+        const topWall = new THREE.Mesh(new THREE.BoxGeometry(ARENA_WIDTH + 1.2, 1.2, 2.5), wallMat);
+        topWall.position.set(0, ARENA_HEIGHT / 2 + 0.6, 0.6);
+        scene.add(topWall);
+
+        // 左右兩側牆
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(1.2, ARENA_HEIGHT + 1.2, 2.5), wallMat);
+        leftWall.position.set(-ARENA_WIDTH / 2 - 0.6, 0, 0.6);
+        scene.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(1.2, ARENA_HEIGHT + 1.2, 2.5), wallMat);
+        rightWall.position.set(ARENA_WIDTH / 2 + 0.6, 0, 0.6);
+        scene.add(rightWall);
+
+        // 底部網格背景地板
+        const gridHelper = new THREE.GridHelper(ARENA_WIDTH * 1.6, 26, 0x00f0ff, 0x1f2345);
+        gridHelper.rotation.x = Math.PI / 2;
+        gridHelper.position.set(0, 0, -1.0);
+        scene.add(gridHelper);
+
+        // --- 3. 玩家擋板 (Paddle) ---
+        const paddleGeo = new THREE.BoxGeometry(PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_DEPTH);
+        const paddleMat = new THREE.MeshStandardMaterial({
+            color: 0x00f0ff,
+            emissive: 0x0077aa,
+            metalness: 0.6,
+            roughness: 0.2
+        });
+        const paddle = new THREE.Mesh(paddleGeo, paddleMat);
+        paddle.position.set(0, -ARENA_HEIGHT / 2 + 2.5, 0.5);
+        scene.add(paddle);
+
+        // --- 4. 能量彈球 (Ball) ---
+        const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
+        const ballMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            emissive: 0x00f0ff,
+            emissiveIntensity: 0.9,
+            metalness: 0.8,
+            roughness: 0.1
+        });
+        const ball = new THREE.Mesh(ballGeo, ballMat);
+        scene.add(ball);
+
+        // --- 5. 爆炸粒子碎屑系統 ---
+        const particles = [];
+        const particleGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+
+        function spawnExplosion(pos, hexColor, count = 14) {
+            for (let i = 0; i < count; i++) {
+                const mat = new THREE.MeshBasicMaterial({ color: hexColor, transparent: true, opacity: 1 });
+                const mesh = new THREE.Mesh(particleGeo, mat);
+                mesh.position.copy(pos);
+
+                // 隨機向外炸裂速度
+                const speed = 0.25 + Math.random() * 0.45;
+                const angle = Math.random() * Math.PI * 2;
+                const vz = (Math.random() - 0.2) * 0.4;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+
+                particles.push({
+                    mesh,
+                    vx,
+                    vy,
+                    vz,
+                    life: 1.0,
+                    decay: 0.025 + Math.random() * 0.02
+                });
+                scene.add(mesh);
+            }
+        }
+
+        // --- 6. 鮮艷霓虹磚塊配色與矩陣 ---
+        const BRICK_PALETTES = [
+            { color: 0xff0055, emissive: 0x770022, pts: 50 }, // 螢光粉紅
+            { color: 0xff8800, emissive: 0x773300, pts: 40 }, // 亮琥珀橘
+            { color: 0xffe600, emissive: 0x665500, pts: 30 }, // 亮檸檬黃
+            { color: 0x00ff88, emissive: 0x006633, pts: 20 }, // 電光翠綠
+            { color: 0x00d0ff, emissive: 0x005588, pts: 10 }  // 青空幻藍
+        ];
+
+        let bricks = [];
+        const brickGeo = new THREE.BoxGeometry(2.4, 1.0, 1.2);
+
+        function createBricks(level = 1) {
+            // 清理舊磚塊
+            bricks.forEach(b => scene.remove(b.mesh));
+            bricks = [];
+
+            const rows = 5;
+            const cols = 9;
+            const startX = -((cols - 1) * 2.8) / 2;
+            const startY = ARENA_HEIGHT / 2 - 4.5;
+
+            for (let r = 0; r < rows; r++) {
+                const palette = BRICK_PALETTES[r % BRICK_PALETTES.length];
+                for (let c = 0; c < cols; c++) {
+                    // 第2關以上隨機跳過少數磚塊做造型
+                    if (level > 1 && (r + c + level) % 7 === 0) continue;
+
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: palette.color,
+                        emissive: palette.emissive,
+                        metalness: 0.5,
+                        roughness: 0.3
+                    });
+
+                    const mesh = new THREE.Mesh(brickGeo, mat);
+                    mesh.position.set(startX + c * 2.8, startY - r * 1.5, 0.6);
+                    scene.add(mesh);
+
+                    bricks.push({
+                        mesh,
+                        pts: palette.pts,
+                        color: palette.color,
+                        w: 2.4,
+                        h: 1.0,
+                        alive: true
+                    });
+                }
+            }
+        }
+
+        // --- 7. 遊戲核心狀態與物理變數 ---
+        let gameState = 'START'; // 'START', 'PLAYING', 'LOST_LIFE', 'GAMEOVER', 'VICTORY'
+        let score = 0;
+        let lives = 3;
+        let currentLevel = 1;
+        let combo = 0;
+
+        // 球的物理
+        let ballVel = { x: 0, y: 0 };
+        const BASE_SPEED = 0.32;
+        let ballAttached = true;
+
+        // 擋板移動
+        let targetPaddleX = 0;
+        const keys = {};
+
+        function resetBallOnPaddle() {
+            ballAttached = true;
+            ballVel = { x: 0, y: 0 };
+            ball.position.set(paddle.position.x, paddle.position.y + 1.2, 0.6);
+            ballLight.position.copy(ball.position);
+        }
+
+        function launchBall() {
+            if (!ballAttached || gameState !== 'PLAYING') return;
+            ballAttached = false;
+            // 給予初始隨機斜角衝量
+            const angle = (Math.random() * 0.6 - 0.3) + Math.PI / 2; // 近似向上
+            const speed = BASE_SPEED + (currentLevel - 1) * 0.03;
+            ballVel.x = Math.cos(angle) * speed;
+            ballVel.y = Math.sin(angle) * speed;
+            sfx.bounce(true);
+        }
+
+        function updateHUD() {
+            document.getElementById('score-val').textContent = score;
+            document.getElementById('level-val').textContent = currentLevel;
+            let heartStr = '';
+            for (let i = 0; i < lives; i++) heartStr += '❤️';
+            document.getElementById('lives-val').textContent = heartStr || '💀';
+        }
+
+        // --- 8. 操作輸入監聽 (滑鼠、觸控與鍵盤) ---
+        function onPointerMove(clientX) {
+            const normX = (clientX / window.innerWidth) * 2 - 1;
+            const bound = (ARENA_WIDTH - PADDLE_WIDTH) / 2;
+            targetPaddleX = normX * (ARENA_WIDTH * 0.65);
+            targetPaddleX = Math.max(-bound, Math.min(bound, targetPaddleX));
+        }
+
+        window.addEventListener('mousemove', (e) => onPointerMove(e.clientX));
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                onPointerMove(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (gameState === 'PLAYING' && ballAttached) {
+                    launchBall();
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        window.addEventListener('pointerdown', () => {
+            if (gameState === 'PLAYING' && ballAttached) {
+                launchBall();
+            }
+        });
+
+        // 視窗自適應
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 9. 介面彈窗管理 ---
+        const modal = document.getElementById('screen-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalBtn = document.getElementById('modal-btn');
+
+        function showModal(title, desc, btnText, callback) {
+            modalTitle.textContent = title;
+            modalDesc.innerHTML = desc;
+            modalBtn.textContent = btnText;
+            modal.classList.remove('hidden');
+
+            const onClick = () => {
+                sfx.init();
+                modal.classList.add('hidden');
+                modalBtn.removeEventListener('click', onClick);
+                callback();
+            };
+            modalBtn.addEventListener('click', onClick);
+        }
+
+        function startNewGame() {
+            score = 0;
+            lives = 3;
+            currentLevel = 1;
+            combo = 0;
+            updateHUD();
+            createBricks(currentLevel);
+            resetBallOnPaddle();
+            gameState = 'PLAYING';
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            updateHUD();
+            createBricks(currentLevel);
+            resetBallOnPaddle();
+            gameState = 'PLAYING';
+        }
+
+        modalBtn.addEventListener('click', () => {
+            sfx.init();
+            modal.classList.add('hidden');
+            startNewGame();
+        });
+
+        // --- 10. 物理碰撞與遊戲循環 ---
+        function updatePhysics() {
+            // 平滑內插移動擋板 (Lerp)
+            const bound = (ARENA_WIDTH - PADDLE_WIDTH) / 2;
+            if (keys['ArrowLeft'] || keys['KeyA']) targetPaddleX -= 0.6;
+            if (keys['ArrowRight'] || keys['KeyD']) targetPaddleX += 0.6;
+            targetPaddleX = Math.max(-bound, Math.min(bound, targetPaddleX));
+
+            paddle.position.x += (targetPaddleX - paddle.position.x) * 0.22;
+
+            // 球附著在擋板上
+            if (ballAttached) {
+                ball.position.x = paddle.position.x;
+                ball.position.y = paddle.position.y + 1.2;
+                ball.position.z = 0.6;
+                ballLight.position.copy(ball.position);
+                return;
+            }
+
+            // 球移動
+            ball.position.x += ballVel.x;
+            ball.position.y += ballVel.y;
+            ballLight.position.copy(ball.position);
+
+            // 邊界反彈 (左右兩牆)
+            const halfArenaW = ARENA_WIDTH / 2;
+            if (ball.position.x - BALL_RADIUS <= -halfArenaW) {
+                ball.position.x = -halfArenaW + BALL_RADIUS;
+                ballVel.x = Math.abs(ballVel.x);
+                sfx.bounce(false);
+            } else if (ball.position.x + BALL_RADIUS >= halfArenaW) {
+                ball.position.x = halfArenaW - BALL_RADIUS;
+                ballVel.x = -Math.abs(ballVel.x);
+                sfx.bounce(false);
+            }
+
+            // 邊界反彈 (上方牆壁)
+            const halfArenaH = ARENA_HEIGHT / 2;
+            if (ball.position.y + BALL_RADIUS >= halfArenaH) {
+                ball.position.y = halfArenaH - BALL_RADIUS;
+                ballVel.y = -Math.abs(ballVel.y);
+                sfx.bounce(false);
+            }
+
+            // 擋板碰撞判定 (AABB + 角度偏移反彈)
+            const padX = paddle.position.x;
+            const padY = paddle.position.y;
+            const halfPadW = PADDLE_WIDTH / 2;
+            const halfPadH = PADDLE_HEIGHT / 2;
+
+            if (ball.position.y - BALL_RADIUS <= padY + halfPadH &&
+                ball.position.y + BALL_RADIUS >= padY - halfPadH &&
+                ball.position.x + BALL_RADIUS >= padX - halfPadW &&
+                ball.position.x - BALL_RADIUS <= padX + halfPadW &&
+                ballVel.y < 0) {
+
+                // 根據擊中擋板的相對位置改變反射角度，帶來極佳操作手感
+                const hitOffset = (ball.position.x - padX) / halfPadW; // -1.0 ~ 1.0
+                const currentSpeed = Math.sqrt(ballVel.x * ballVel.x + ballVel.y * ballVel.y);
+                const bounceAngle = (hitOffset * 0.95) + Math.PI / 2; // 反射弧度
+
+                ballVel.x = Math.cos(bounceAngle) * currentSpeed;
+                ballVel.y = Math.sin(bounceAngle) * currentSpeed;
+
+                combo = 0; // 重置磚塊連擊
+                sfx.bounce(true);
+            }
+
+            // 磚塊碰撞判定
+            for (let i = 0; i < bricks.length; i++) {
+                const b = bricks[i];
+                if (!b.alive) continue;
+
+                const bx = b.mesh.position.x;
+                const by = b.mesh.position.y;
+                const halfW = b.w / 2;
+                const halfH = b.h / 2;
+
+                if (ball.position.x + BALL_RADIUS >= bx - halfW &&
+                    ball.position.x - BALL_RADIUS <= bx + halfW &&
+                    ball.position.y + BALL_RADIUS >= by - halfH &&
+                    ball.position.y - BALL_RADIUS <= by + halfH) {
+
+                    // 判定反彈軸向 (從側面或上下撞入)
+                    const prevX = ball.position.x - ballVel.x;
+                    const prevY = ball.position.y - ballVel.y;
+
+                    if (prevX + BALL_RADIUS <= bx - halfW || prevX - BALL_RADIUS >= bx + halfW) {
+                        ballVel.x = -ballVel.x;
+                    } else {
+                        ballVel.y = -ballVel.y;
+                    }
+
+                    // 銷毀磚塊並產生 3D 爆炸粒子
+                    b.alive = false;
+                    scene.remove(b.mesh);
+                    spawnExplosion(b.mesh.position, b.color, 16);
+
+                    combo++;
+                    score += b.pts * Math.min(combo, 5);
+                    updateHUD();
+                    sfx.breakBrick(combo);
+
+                    // 檢查過關 (所有磚塊已清空)
+                    const remaining = bricks.filter(item => item.alive);
+                    if (remaining.length === 0) {
+                        gameState = 'VICTORY';
+                        sfx.winLevel();
+                        showModal('🎉 關卡完成！', `恭喜突破第 ${currentLevel} 關！<br>目前總得分: <b>${score}</b>`, '進入下一關', () => {
+                            nextLevel();
+                        });
+                    }
+                    break;
+                }
+            }
+
+            // 掉出底部 (失誤掉球)
+            if (ball.position.y < -ARENA_HEIGHT / 2 - 2) {
+                lives--;
+                updateHUD();
+                sfx.loseLife();
+
+                if (lives > 0) {
+                    resetBallOnPaddle();
+                } else {
+                    gameState = 'GAMEOVER';
+                    showModal('💀 遊戲結束', `很可惜，球掉出邊界了！<br>最終累計分數: <b>${score}</b>`, '再玩一次', () => {
+                        startNewGame();
+                    });
+                }
+            }
+        }
+
+        // --- 11. 更新粒子動畫 ---
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.mesh.position.x += p.vx;
+                p.mesh.position.y += p.vy;
+                p.mesh.position.z += p.vz;
+                p.mesh.rotation.x += 0.1;
+                p.mesh.rotation.y += 0.12;
+
+                p.life -= p.decay;
+                p.mesh.material.opacity = Math.max(0, p.life);
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- 12. 主動畫渲染循環 ---
+        function animate() {
+            requestAnimationFrame(animate);
